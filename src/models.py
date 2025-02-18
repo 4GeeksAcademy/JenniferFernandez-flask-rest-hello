@@ -5,22 +5,6 @@ from typing import List
 
 db = SQLAlchemy()
 
-
-# class User(db.Model):
-#     __tablename__ = "user"
-
-#     id: Mapped[int] = mapped_column(primary_key=True)
-#     email: Mapped[str] = mapped_column(String(120), nullable=False)
-#     password: Mapped[str] = mapped_column(String(80))
-#     is_active: Mapped[bool]
-
-#     def serialize(self):
-#         return {
-#             "id": self.id,
-#             "email": self.email,
-#             "is_active": self.is_active
-#             # do not serialize the password, its a security breach
-#         }
 class User(db.Model):
     __tablename__ = 'user'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -30,9 +14,7 @@ class User(db.Model):
     password: Mapped[str] = mapped_column(String(8), nullable=False)
     favorites_people: Mapped[List["Favorites_people"]] = relationship()
     favorites_planets: Mapped[List["Favorites_planets"]] = relationship()
-    # favoritos_caracteres: Mapped[List["Favorites_caracters"]] = relationship(back_populates="usuario")
-    # favorite_people = db.Column(db.String(120), unique=False, nullable=True)
-    # favorite_planet = db.Column(db.String(120), unique=False, nullable=True)
+   
 
     def serialize(self):
         return {
@@ -53,7 +35,7 @@ class People(db.Model):
     mass: Mapped[int] = mapped_column(Integer, nullable=True)
     birth_year: Mapped[int] = mapped_column(Integer, nullable=True)
     homeworld: Mapped[str] = mapped_column(String(50), nullable=True)
-    favoritos: Mapped[List["Favorites_people"]] = relationship("Favorites_people", back_populates="people")
+    favorites: Mapped[List["Favorites_people"]] = relationship()
     
   
 
@@ -76,7 +58,8 @@ class Planets(db.Model):
     population: Mapped[int] = mapped_column(Integer, nullable=True)
     diameter: Mapped[int] = mapped_column(Integer, nullable=True)
     orbital_period: Mapped[int] = mapped_column(Integer, nullable=True)
-    favoritos: Mapped[List["Favorites_planets"]] = relationship("Favorites_planets", back_populates="planet")
+    favorites: Mapped[List["Favorites_planets"]] = relationship()
+    
     
     
 
