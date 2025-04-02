@@ -12,8 +12,8 @@ class User(db.Model):
     last_name: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[str] = mapped_column(nullable=False, unique=True)
     password: Mapped[str] = mapped_column(String(8), nullable=False)
-    favorites_people: Mapped[List["Favorites_people"]] = relationship()
-    favorites_planets: Mapped[List["Favorites_planets"]] = relationship()
+    favorite_people: Mapped[List["Favorites_people"]] = relationship()
+    favorite_planets: Mapped[List["Favorites_planets"]] = relationship()
    
 
     def serialize(self):
@@ -21,9 +21,7 @@ class User(db.Model):
             "id": self.id,
             "name": self.name,
             "last_name": self.last_name,
-            "email": self.email,
-            "favorites_people":self.favorites_people,
-            "favorites_planets":self.favorites_planets
+            "email": self.email
             
         }
     
@@ -76,12 +74,13 @@ class Planets(db.Model):
 class Favorites_people(db.Model):
     __tablename__ = 'favorites_people'
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    # name: Mapped[str] = mapped_column(String(50), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey('user.id'), nullable=False)
     people_id: Mapped[int] = mapped_column(ForeignKey('people.id'), nullable=False)
 
     # user = db.relationship("User", backref="favorites_people")
-    # # people = db.relationship("People", backref="favorites_people")
+    # people = db.relationship("People", backref="favorites_people")
+
     # class Favorites_model(ModelView):
     # column_list = ('user_id', 'people_id', 'planet_id')
     # form_columns = ('user_id', 'people_id', 'planet_id')
@@ -89,7 +88,7 @@ class Favorites_people(db.Model):
     def serialize(self):
         return {
             "id": self.id,
-            "name": self.name,
+            # "name": self.name,
             "user_id":self.user_id,
             "people_id":self.people_id
            
@@ -98,10 +97,11 @@ class Favorites_people(db.Model):
 class Favorites_planets(db.Model):
     __tablename__ = 'favorites_planets'
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    # name: Mapped[str] = mapped_column(String(50), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey('user.id'), nullable=False)
     planets_id: Mapped[int] = mapped_column(ForeignKey('planets.id'), nullable=False)
-
+    # user = db.relationship()
+    # planets = db.relationship()
     # user = db.relationship("User", backref="favorites_planets")
     # planets = db.relationship("Planets", backref="favorites_planets")
 
@@ -109,8 +109,8 @@ class Favorites_planets(db.Model):
     def serialize(self):
         return {
             "id": self.id,
-            "name": self.name,
-            "user_id":self.user_id,
+            # "name": self.name,
+            "user_id":self.userid,
             "planets_id":self.planets_id
            
         }
