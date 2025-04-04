@@ -410,7 +410,7 @@ def protected():
 
 
 @app.route('/user/<int:user_id>/favorites', methods=['GET'])
-def get_user_favorites(user_id):
+def get_user_favorite(user_id):
     try:
         # Obtener el usuario por ID
         user = db.session.execute(db.select(User).filter_by(id=user_id)).scalar_one_or_none()

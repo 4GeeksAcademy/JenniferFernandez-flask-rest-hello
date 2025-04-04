@@ -33,7 +33,13 @@ class People(db.Model):
     mass: Mapped[int] = mapped_column(Integer, nullable=True)
     birth_year: Mapped[int] = mapped_column(Integer, nullable=True)
     homeworld: Mapped[str] = mapped_column(String(50), nullable=True)
-    favorites: Mapped[List["Favorites_people"]] = relationship()
+    # favorites: Mapped[List["Favorites_people"]] = relationship()
+    favorites: Mapped[List["Favorites_people"]] = relationship(
+        "Favorites_people",
+        back_populates="people",
+        cascade="all, delete-orphan"  #borrado en cascada de datos huerfanos
+        
+    )
     
   
 
@@ -56,7 +62,11 @@ class Planets(db.Model):
     population: Mapped[int] = mapped_column(Integer, nullable=True)
     diameter: Mapped[int] = mapped_column(Integer, nullable=True)
     orbital_period: Mapped[int] = mapped_column(Integer, nullable=True)
-    favorites: Mapped[List["Favorites_planets"]] = relationship()
+    favorites: Mapped[List["Favorites_planets"]] = relationship(
+        "Favorites_planets",
+        back_populates="planet",
+        cascade="all, delete-orphan"
+    )
     
     
     
@@ -80,6 +90,7 @@ class Favorites_people(db.Model):
 
     # user = db.relationship("User", backref="favorites_people")
     # people = db.relationship("People", backref="favorites_people")
+    people = relationship("People", back_populates="favorites")
 
     # class Favorites_model(ModelView):
     # column_list = ('user_id', 'people_id', 'planet_id')
@@ -101,7 +112,7 @@ class Favorites_planets(db.Model):
     user_id: Mapped[int] = mapped_column(ForeignKey('user.id'), nullable=False)
     planets_id: Mapped[int] = mapped_column(ForeignKey('planets.id'), nullable=False)
     # user = db.relationship()
-    # planets = db.relationship()
+    planet = relationship("Planets", back_populates="favorites")
     # user = db.relationship("User", backref="favorites_planets")
     # planets = db.relationship("Planets", backref="favorites_planets")
 
