@@ -9,9 +9,9 @@ from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
 from models import db, User, People, Planets, Favorites_people, Favorites_planets
-# from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, get_current_user,  JWTManager
 from sqlalchemy.exc import NoResultFound
-#from models import Person
+
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
@@ -38,38 +38,18 @@ def handle_invalid_usage(error):
 def sitemap():
     return generate_sitemap(app)
 
-# @app.route('/user', methods=['GET'])
-# def handle_hello():
-
-#     response_body = {
-#         "msg": "Hello, this is your GET /user response "
-#     }
-
-#     return jsonify(response_body), 200
-
-#RUTAS USUARIO:
-
-
-
-
-
-
+#ENDPOINTS PARA USERS:
 
 
 @app.route('/users', methods=['GET'])
 def get_all_users():
     try:
-        # Realiza la consulta a la base de datos
         data = db.session.scalars(db.select(User)).all()
-        
-        # Comprueba si hay resultados
+
         if not data:
             return jsonify({"msg": "No users found"}), 404
         
-        # Serializa los resultados
         result = list(map(lambda item: item.serialize(), data))
-        
-        # Construye la respuesta
         response_body = {
             "results": result
         }
@@ -77,96 +57,207 @@ def get_all_users():
         return jsonify(response_body), 200
 
     except Exception as e:
-        # Maneja cualquier otro tipo de error
         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
-    
+
+
 @app.route('/user', methods=['POST'])
 def create_user():
     try:
         request_body = request.json
-        print(request_body)
-        # email = request.json.get("email", None)
-        # password = request.json.get("password", None)
+        
+        email = request_body["email"]
+        password = request_body["password"]
 
-        # Verifica si la persona ya existe en la base de datos
+        # Verifica si el usuario ya existe
         existing_user = db.session.execute(
-            db.select(User).filter_by(email=request_body["email"])
-        ).scalar_one_or_none()
+            db.select(User).filter_by(email=email)
+        ).scalar_one()
 
         if existing_user:
-            return jsonify({"result": "user exists"}), 400
-        
-        # Si no existe, instanciar y agregar la nueva persona
+            # access_token = create_access_token(identity=email)
+            return jsonify({
+                # "access_token": access_token,
+                # "user": existing_user.serialize(),
+                "message": "User already exists, logged in successfully"
+            }), 200
+
+        # Crear nuevo usuario
         new_user = User(
             name=request_body["name"],
             last_name=request_body["last_name"],
-            email=request_body["email"],
-            password=request_body["password"]
-            
+            email=email,
+            password=password,
+            # is_active=True
         )
         
         db.session.add(new_user)
         db.session.commit()
-        
-        return jsonify({"msg": "created"}), 201
-        # Genera el token JWT
-        # access_token = create_access_token(identity=email)
-        # return jsonify({"access_token": access_token, "User": new_user.serialize()}), 201
-    except KeyError as e:
-        # Manejo de errores cuando faltan campos en el cuerpo de la solicitud
-        return jsonify({"error": f"Missing field: {str(e)}"}), 400
-    
+
+        return jsonify({
+            "user": new_user.serialize(),
+            "message": "User created successfully"
+        }), 201
     except Exception as e:
-        # Manejo de otros errores generales
         return jsonify({"error": str(e)}), 500
+
+#ENDPOINTS PARA FAVORITOS
+
+@app.route('/user/<int:user_id>/favorites', methods=['GET'])
+def get_user_favorite(user_id):
+    try:
+        # Obtener el usuario por ID
+        user = db.session.execute(db.select(User).filter_by(id=user_id)).scalar_one()
+        
+        if user is None:
+            return jsonify({"msg": "User not found"}), 404
+        
+        favorite_people_ids = db.session.execute(
+            db.select(Favorites_people.people_id).filter_by(user_id=user_id)
+        ).scalars().all()
+        
+        favorite_planets_ids = db.session.execute(
+            db.select(Favorites_planets.planets_id).filter_by(user_id=user_id)
+        ).scalars().all()
+        
+        # Obtener detalles, ¿Eran necesarios estos detalles?
+        favorite_people = []
+        if favorite_people_ids:
+            favorite_people = db.session.scalars(
+                db.select(People).filter(People.id.in_(favorite_people_ids))
+            ).all()
+        
+        favorite_planets = []
+        if favorite_planets_ids:
+            favorite_planets = db.session.scalars(
+                db.select(Planets).filter(Planets.id.in_(favorite_planets_ids))
+            ).all()
+        
+        # Serializar 
+        serialized_people = [person.serialize() for person in favorite_people]
+        serialized_planets = [planet.serialize() for planet in favorite_planets]
+        
+        response_body = {
+            "favorite_people": serialized_people,
+            "favorite_planets": serialized_planets
+        }
+        
+        return jsonify(response_body), 200
+
+    except Exception as e:
+        return jsonify({"msg": "An error occurred", "error": str(e)}), 500
     
-# @app.route("/register", methods=["POST"])
-# def register():
-#     try:
-#         email = request.json.get("email", None)
-#         password = request.json.get("password", None)
+@app.route('/favorite/planet/<int:planet_id>', methods=['POST'])
+def add_favorite_planet(planet_id):
+    try:
+        data = request.get_json()
 
-#         # Comprueba si el usuario ya existe
-#         existing_user = db.session.execute(db.select(User).filter_by(email=email)).scalar_one_or_none()
-#         if existing_user:
-#             return jsonify({"msg": "User already exists"}), 400
+        if not data or "user_id" not in data:
+            return jsonify({"error": "Missing required field: user_id"}), 400
 
-#         # Crea un nuevo usuario
-#         hashed_password = generate_password_hash(password)  # Almacena la contraseña de forma segura
-#         new_user = User(email=email, password=hashed_password)
-#         db.session.add(new_user)
-#         db.session.commit()
+        user_id = data["user_id"]
 
-#         # Genera el token JWT
-#         access_token = create_access_token(identity=email)
-#         return jsonify({"access_token": access_token, "User": new_user.serialize()}), 201
+        user = db.session.execute(
+            db.select(User).filter_by(id=user_id)
+        ).scalar_one_or_none()
+        
+        if not user:
+            return jsonify({"error": "User not found"}), 404
 
-#     except Exception as e:
-#         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
+        planet = db.session.execute(
+            db.select(Planets).filter_by(id=planet_id)
+        ).scalar_one_or_none() 
+        if not planet:
+            return jsonify({"error": "Planet not found"}), 404
+
+        existing_fav = db.session.execute(
+            db.select(Favorites_planets).filter_by(user_id=user_id, planet_id=planet_id)
+        ).scalar_one_or_none()  
+        if existing_fav:
+            return jsonify({"error": "Planet already in favorites"}), 409
+
+        new_fav_planet = Favorites_planets(user_id=user_id, planet_id=planet_id)
+        db.session.add(new_fav_planet)
+        db.session.commit()
+
+        return jsonify({"message": "Favorite added successfully"}), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/favorite/people/<int:people_id>', methods=['POST'])
+def add_favorite_people(people_id):
+    try:
+        data = request.get_json()
+
+        if not data or "user_id" not in data:
+            return jsonify({"error": "Missing required field: user_id"}), 400
+
+        user_id = data["user_id"]
+
+        user = db.session.execute(
+            db.select(User).filter_by(id=user_id)
+        ).scalar_one_or_none()
+        
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        person = db.session.execute(
+            db.select(People).filter_by(id=people_id)
+        ).scalar_one_or_none() 
+        if not person:
+            return jsonify({"error": "Person not found"}), 404
+
+        # Evitar duplicados
+        existing_fav = db.session.execute(
+            db.select(Favorites_people).filter_by(user_id=user_id, people_id=people_id)
+        ).scalar_one_or_none()  
+        if existing_fav:
+            return jsonify({"error": "Person already in favorites"}), 409
+
+        new_fav_person = Favorites_people(user_id=user_id, people_id=people_id)
+        db.session.add(new_fav_person)
+        db.session.commit()
+
+        return jsonify({"message": "Favorite added successfully"}), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/favorites/planet/<int:id>', methods=['DELETE'])
+def delete_favorites_planet(id):
+    try:
+
+        favorite_planet = db.session.execute(db.select(Favorites_planets).filter_by(id=id)).scalar_one()
+        
+        if favorite_planet is None:
+            return jsonify({"msg": "Planet favorite not found"}), 404
+        
+        db.session.delete(favorite_planet)
+        db.session.commit()
+
+        return jsonify({"msg": "Favorite planet deleted successfully"}), 200
+
+    except Exception as e:
+        return jsonify({"msg": "An error occurred", "error": str(e)}), 500
     
-# @app.route('/users/favorites', methods=['GET'])
-# def get_favorites_users():
-#     try:
-#         # Realiza la consulta a la base de datos
-#         data = db.session.scalars(db.select(Favorites_people)).all()
+@app.route('/favorites/people/<int:id>', methods=['DELETE'])
+def delete_favorites_people(id):
+    try:
+      
+        favorite_people = db.session.execute(db.select(Favorites_people).filter_by(id=id)).scalar_one()
         
-#         # Comprueba si hay resultados
-#         if not data:
-#             return jsonify({"msg": "No users found"}), 404
+        if favorite_people is None:
+            return jsonify({"msg": "Person favorite not found"}), 404
         
-#         # Serializa los resultados
-#         result = list(map(lambda item: item.serialize(), data))
-        
-#         # Construye la respuesta
-#         response_body = {
-#             "results": result
-#         }
-        
-#         return jsonify(response_body), 200
+        db.session.delete(favorite_people)
+        db.session.commit()
 
-#     except Exception as e:
-#         # Maneja cualquier otro tipo de error
-#         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
+        return jsonify({"msg": "Favorite planet deleted successfully"}), 200
+
+    except Exception as e:
+     
+        return jsonify({"msg": "An error occurred", "error": str(e)}), 500
 
 
 #RUTAS PEOPLE:
@@ -174,42 +265,32 @@ def create_user():
 @app.route('/people', methods=['GET'])
 def get_all_people():
     try:
-        # Realiza la consulta a la base de datos
         data = db.session.scalars(db.select(People)).all()
         
-        # Comprueba si hay resultados
         if not data:
             return jsonify({"msg": "No people found"}), 404
         
-        # Serializa los resultados
         result = list(map(lambda item: item.serialize(), data))
-        
-        # Construye la respuesta
+    
         response_body = {
             "results": result
         }
         
         return jsonify(response_body), 200
-
     except Exception as e:
-        # Maneja cualquier otro tipo de error
         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
     
 
 @app.route('/people/<int:id>', methods=['GET'])
 def get_one_person(id):
     try:
-        # Obtiene la persona de la base de datos
         person = db.session.execute(db.select(People).filter_by(id=id)).scalar_one()
-        
-        # Comprueba si hay resultados
+       
         if person is None:
             return jsonify({"msg": "No person found"}), 404
-        
-        # Serializa el resultado
+
         result = person.serialize()
         
-        # Construye la respuesta
         response_body = {
             "result": result
         }
@@ -217,7 +298,6 @@ def get_one_person(id):
         return jsonify(response_body), 200
 
     except Exception as e:
-        # Maneja cualquier otro tipo de error
         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
     
 @app.route('/people', methods=['POST'])
@@ -226,10 +306,9 @@ def create_person():
         request_body = request.json
         print(request_body)
 
-        # Verifica si la persona ya existe en la base de datos
         existing_person = db.session.execute(
             db.select(People).filter_by(name=request_body["name"])
-        ).scalar_one_or_none()
+        ).scalar_one()
 
         if existing_person:
             return jsonify({"result": "person exists"}), 400
@@ -249,55 +328,74 @@ def create_person():
         return jsonify({"msg": "created"}), 201
 
     except KeyError as e:
-        # Manejo de errores cuando faltan campos en el cuerpo de la solicitud
         return jsonify({"error": f"Missing field: {str(e)}"}), 400
     
     except Exception as e:
-        # Manejo de otros errores generales
+        return jsonify({"error": str(e)}), 500
+    
+
+@app.route('/people/<int:people_id>', methods=['PUT'])
+def updated_people(people_id):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        person = db.session.execute(
+            db.select(People).filter_by(id=people_id)
+        ).scalar_one_or_none()
+
+        if not person:
+            return jsonify({"error": "Person not found"}), 404
+
+        if 'name' in data:
+            person.name = data['name']
+        if 'height' in data:
+            person.height = data['height']
+        if 'mass' in data:
+            person.mass = data['mass']
+        if 'birth_year' in data:
+            person.birth_year = data['birth_year']
+        if 'homeworld' in data:
+            person.homeworld = data['homeworld']
+
+        db.session.commit()
+        return jsonify({"message": "Person updated successfully"}), 200
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route('/people/<int:id>', methods=['DELETE'])
 def delete_people(id):
     try:
-        # Obtiene el personaje de la base de datos
-        person = db.session.execute(db.select(People).filter_by(id=id)).scalar_one_or_none()
+       
+        person = db.session.execute(db.select(People).filter_by(id=id)).scalar_one()
         
-        # Comprueba si el personaje existe
         if person is None:
             return jsonify({"msg": "Person not found"}), 404
         
-        # Elimina el personaje
         db.session.delete(person)
         db.session.commit()
 
         return jsonify({"msg": "Person deleted successfully"}), 200
 
     except Exception as e:
-        # Maneja cualquier otro tipo de error
         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
-    
-#no puedo eliminar people por ID por la relación de favoritos entre tablas
 
-
-
-
+  
 #RUTAS PLANETAS
 
 @app.route('/planets', methods=['GET'])
 def get_all_planets():
     try:
-     # Realiza la consulta a la base de datos
         data = db.session.scalars(db.select(Planets)).all()
 
-        # Comprueba si hay resultados
         if not data:
             return jsonify({"msg": "No planets found"}), 404
         
-        # Serializa los resultados
         result = list(map(lambda item: item.serialize(), data))
         
-        # Construye la respuesta
         response_body = {
             "results": result
         }
@@ -305,23 +403,20 @@ def get_all_planets():
         return jsonify(response_body), 200
 
     except Exception as e:
-        # Maneja cualquier otro tipo de error
+    
         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
     
-@app.route('/planets/<int:id>', methods=['GET'])
+@app.route('/planet/<int:id>', methods=['GET'])
 def get_one_planet(id):
     try:
-        # Obtiene la persona de la base de datos
+   
         planet = db.session.execute(db.select(Planets).filter_by(id=id)).scalar_one()
         
-        # Comprueba si hay resultados
         if planet is None:
             return jsonify({"msg": "No planet found"}), 404
         
-        # Serializa el resultado
         result = planet.serialize()
         
-        # Construye la respuesta
         response_body = {
             "result": result
         }
@@ -329,29 +424,21 @@ def get_one_planet(id):
         return jsonify(response_body), 200
 
     except Exception as e:
-        # Maneja cualquier otro tipo de error
+      
         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
 
 
 @app.route('/planet', methods=['POST'])
 def create_planet():
     try:
-        # Obtener el cuerpo de la solicitud
+      
         request_body = request.json
-        
-        # Validar que el cuerpo de la solicitud tenga los campos requeridos
-        # required_fields = ["name", "climate", "diameter", "orbital_period", "population"]
-        # for field in required_fields:
-        #     if field not in request_body:
-        #         return jsonify({"error": f"Missing field: {field}"}), 400
-
-        # Verificar si el planeta ya existe
-        planet = db.session.execute(db.select(Planets).filter_by(name = request_body["name"])).scalar_one_or_none()
+        planet = db.session.execute(db.select(Planets).filter_by(name = request_body["name"])).scalar_one()
         
         if planet:
             return jsonify({"result": "planet exists"}), 400
         
-        # Crear una nueva instancia de Planets
+     
         planet = Planets(
             name=request_body["name"],
             climate=request_body["climate"],
@@ -360,241 +447,62 @@ def create_planet():
             population=request_body["population"]
         )
         
-        # Agregar el planeta a la sesión y confirmar los cambios
         db.session.add(planet)
         db.session.commit()
         
-        return jsonify({"msg": "planet created"}), 201  # Cambiar a 201 para indicar creación exitosa
+        return jsonify({"msg": "planet created"}), 201 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500  # Capturar cualquier otro error inesperado
+        return jsonify({"error": str(e)}), 500  
 
+@app.route('/planet/<int:planet_id>', methods=['PUT'])
+def update_planet(planet_id):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        planet = db.session.execute(
+            db.select(Planets).filter_by(id=planet_id)
+        ).scalar_one_or_none()
+
+        if not planet:
+            return jsonify({"error": "Planet not found"}), 404
+
+        if "name" in data:
+            planet.name = data["name"]
+        if "climate" in data:
+            planet.climate = data["climate"]
+        if "diameter" in data:
+            planet.diameter = data["diameter"]
+        if "orbital_period" in data:
+            planet.orbital_period = data["orbital_period"]
+        if "population" in data:
+            planet.population = data["population"]
+
+        db.session.commit()
+        return jsonify({"message": "Planet updated successfully"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 
 @app.route('/planet/<int:id>', methods=['DELETE'])
 def delete_planet(id):
     try:
-        # Obtiene el planeta de la base de datos
+   
         planet = db.session.execute(db.select(Planets).filter_by(id=id)).scalar_one()
         
-        # Comprueba si el planeta existe
+       
         if planet is None:
             return jsonify({"msg": "Planet not found"}), 404
         
-        # Elimina el planeta
         db.session.delete(planet)
         db.session.commit()
 
         return jsonify({"msg": "Planet deleted successfully"}), 200
 
     except Exception as e:
-        # Maneja cualquier otro tipo de error
         return jsonify({"msg": "An error occurred", "error": str(e)}), 500
-
-
-#FAVORITOS
-
-@app.route("/favorites", methods=["GET"])
-#portero, pide la autenticación
-# @jwt_required()
-def protected():
-    # current_user = get_jwt_identity()
-    user = db.session.execute(db.select(User).filter_by(id=id)).scalar_one()
-    print(user.id)
-    
-    # Access the identity of the current user with get_jwt_identity
-    
-    favorites = list(db.session.execute(db.select(Favorites_people).filter_by(user_id = user.id)).scalars())
-    print(user.favorites)
-    results = list(map(lambda item: item.serialize(),user.favorites))
-    print(results)
-    return jsonify({"results":results}), 200
-
-
-@app.route('/user/<int:user_id>/favorites', methods=['GET'])
-def get_user_favorite(user_id):
-    try:
-        # Obtener el usuario por ID
-        user = db.session.execute(db.select(User).filter_by(id=user_id)).scalar_one_or_none()
-        
-        if user is None:
-            return jsonify({"msg": "User not found"}), 404
-        
-        # Obtener los favoritos de personas
-        favorite_people_ids = db.session.execute(
-            db.select(Favorites_people.people_id).filter_by(user_id=user_id)
-        ).scalars().all()
-        
-        # Obtener los favoritos de planetas
-        favorite_planets_ids = db.session.execute(
-            db.select(Favorites_planets.planets_id).filter_by(user_id=user_id)
-        ).scalars().all()
-        
-        # Obtener detalles de las personas favoritas
-        favorite_people = []
-        if favorite_people_ids:
-            favorite_people = db.session.scalars(
-                db.select(People).filter(People.id.in_(favorite_people_ids))
-            ).all()
-        
-        # Obtener detalles de los planetas favoritos
-        favorite_planets = []
-        if favorite_planets_ids:
-            favorite_planets = db.session.scalars(
-                db.select(Planets).filter(Planets.id.in_(favorite_planets_ids))
-            ).all()
-        
-        # Serializa los resultados
-        serialized_people = [person.serialize() for person in favorite_people]
-        serialized_planets = [planet.serialize() for planet in favorite_planets]
-        
-        # Construir la respuesta
-        response_body = {
-            "favorite_people": serialized_people,
-            "favorite_planets": serialized_planets
-        }
-        
-        return jsonify(response_body), 200
-
-    except Exception as e:
-        # Maneja cualquier otro tipo de error
-        return jsonify({"msg": "An error occurred", "error": str(e)}), 500
-    
-
-# @app.route('/favorite/planet', methods=['POST'])
-# def create_planet():
-#     try:
-#         # Obtener el cuerpo de la solicitud
-#         request_body = request.json
-        
-#         # Validar que el cuerpo de la solicitud tenga los campos requeridos
-#         # required_fields = ["name", "climate", "diameter", "orbital_period", "population"]
-#         # for field in required_fields:
-#         #     if field not in request_body:
-#         #         return jsonify({"error": f"Missing field: {field}"}), 400
-
-#         # Verificar si el planeta ya existe
-#         planet = db.session.execute(db.select(Planets).filter_by(name = request_body["name"])).scalar_one_or_none()
-        
-#         if planet:
-#             return jsonify({"result": "planet exists"}), 400
-        
-#         # Crear una nueva instancia de Planets
-#         planet = Planets(
-#             name=request_body["name"],
-#             climate=request_body["climate"],
-#             diameter=request_body["diameter"],
-#             orbital_period=request_body["orbital_period"],
-#             population=request_body["population"]
-#         )
-        
-#         # Agregar el planeta a la sesión y confirmar los cambios
-#         db.session.add(planet)
-#         db.session.commit()
-        
-#         return jsonify({"msg": "planet created"}), 201  # Cambiar a 201 para indicar creación exitosa
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500  # Capturar cualquier otro error inesperado
-
-# [GET] /people Listar todos los registros de people en la base de datos. -----------
-# [GET] /people/<int:people_id> Muestra la información de un solo personaje según su id.----------
-# [GET] /planets Listar todos los registros de planets en la base de datos.----------
-# [GET] /planets/<int:planet_id> Muestra la información de un solo planeta según su id.-----------
-# Adicionalmente, necesitamos crear los siguientes endpoints para que podamos tener usuarios y favoritos en nuestro blog:
-
-# [GET] /users Listar todos los usuarios del blog.----------
-# [GET] /users/favorites Listar todos los favoritos que pertenecen al usuario actual.----¿por id?
-# [POST] /favorite/planet/<int:planet_id> Añade un nuevo planet favorito al usuario actual con el id = planet_id.
-# [POST] /favorite/people/<int:people_id> Añade un nuevo people favorito al usuario actual con el id = people_id.
-# [DELETE] /favorite/planet/<int:planet_id> Elimina un planet favorito con el id = planet_id.
-# [DELETE] /favorite/people/<int:people_id> Elimina un people favorito con el id = people_id.
-
-@app.route('/users/favorites', methods=['GET'])
-def get_user_favorites():
-    try:
-        # Suponiendo que tienes un método para obtener el usuario actual
-        # Esto puede ser a través de un token de sesión, JWT, etc.
-        user = get_current_user()  # Implementa esta función según tu lógica de autenticación
-        
-        if user is None:
-            return jsonify({"msg": "User not found"}), 404
-        
-        # Obtener los favoritos de personas
-        favorite_people_ids = db.session.execute(
-            db.select(Favorites_people.people_id).filter_by(user_id=user.id)  # Usa user.id
-        ).scalars().all()
-        
-        # Obtener los favoritos de planetas
-        favorite_planets_ids = db.session.execute(
-            db.select(Favorites_planets.planets_id).filter_by(user_id=user.id)  # Usa user.id
-        ).scalars().all()
-        
-        # Obtener detalles de las personas favoritas
-        favorite_people = []
-        if favorite_people_ids:
-            favorite_people = db.session.scalars(
-                db.select(People).filter(People.id.in_(favorite_people_ids))
-            ).all()
-        
-        # Obtener detalles de los planetas favoritos
-        favorite_planets = []
-        if favorite_planets_ids:
-            favorite_planets = db.session.scalars(
-                db.select(Planets).filter(Planets.id.in_(favorite_planets_ids))
-            ).all()
-        
-        # Serializa los resultados
-        serialized_people = [person.serialize() for person in favorite_people]
-        serialized_planets = [planet.serialize() for planet in favorite_planets]
-        
-        # Construir la respuesta
-        response_body = {
-            "favorite_people": serialized_people,
-            "favorite_planets": serialized_planets
-        }
-        
-        return jsonify(response_body), 200
-
-    except Exception as e:
-        # Maneja cualquier otro tipo de error
-        return jsonify({"msg": "An error occurred", "error": str(e)}), 500
-
-# def get_current_user():
-#     # Implementa la lógica para obtener el usuario actual
-#     # Por ejemplo, podrías extraer el token de autenticación de los headers
-#     # y usarlo para buscar el usuario en la base de datos
-#     current_user = get_jwt_identity()
-#     user = db.session.execute(db.select(User).filter_by(email=current_user)).scalar_one()
-#     auth_header = request.headers.get('Authorization')
-#     results = list(map(lambda item: item.serialize(),user.favorites))
-#     print(results)
-#     return jsonify({"results":results}), 200
-
-# def protected():
-#     current_user = get_jwt_identity()
-#     user = db.session.execute(db.select(User).filter_by(email=current_user)).scalar_one()
-#     print(user.id)
-#     print(user.favorites)
-#     # Access the identity of the current user with get_jwt_identity
-#     # favorites = list(db.session.execute(db.select(Favorites).filter_by(user_id = user.id)).scalars())
-#     results = list(map(lambda item: item.serialize(),user.favorites))
-#     print(results)
-#     return jsonify({"results":results}), 200
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

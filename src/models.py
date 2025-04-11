@@ -84,22 +84,13 @@ class Planets(db.Model):
 class Favorites_people(db.Model):
     __tablename__ = 'favorites_people'
     id: Mapped[int] = mapped_column(primary_key=True)
-    # name: Mapped[str] = mapped_column(String(50), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey('user.id'), nullable=False)
     people_id: Mapped[int] = mapped_column(ForeignKey('people.id'), nullable=False)
-
-    # user = db.relationship("User", backref="favorites_people")
-    # people = db.relationship("People", backref="favorites_people")
     people = relationship("People", back_populates="favorites")
-
-    # class Favorites_model(ModelView):
-    # column_list = ('user_id', 'people_id', 'planet_id')
-    # form_columns = ('user_id', 'people_id', 'planet_id')
 
     def serialize(self):
         return {
             "id": self.id,
-            # "name": self.name,
             "user_id":self.user_id,
             "people_id":self.people_id
            
@@ -108,20 +99,15 @@ class Favorites_people(db.Model):
 class Favorites_planets(db.Model):
     __tablename__ = 'favorites_planets'
     id: Mapped[int] = mapped_column(primary_key=True)
-    # name: Mapped[str] = mapped_column(String(50), nullable=False)
     user_id: Mapped[int] = mapped_column(ForeignKey('user.id'), nullable=False)
     planets_id: Mapped[int] = mapped_column(ForeignKey('planets.id'), nullable=False)
-    # user = db.relationship()
     planet = relationship("Planets", back_populates="favorites")
-    # user = db.relationship("User", backref="favorites_planets")
-    # planets = db.relationship("Planets", backref="favorites_planets")
 
 
     def serialize(self):
         return {
             "id": self.id,
-            # "name": self.name,
-            "user_id":self.userid,
+            "user_id":self.user_id,
             "planets_id":self.planets_id
            
         }
